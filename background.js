@@ -28,35 +28,28 @@ function addLog(msg) {
     console.log('[IGBulkExt]', line);
 }
 
-// Load state from storage
+// Load preferences from storage (urls remain strictly ephemeral in-memory)
 chrome.storage.local.get(['igbdl_state'], function(result) {
     if (result.igbdl_state) {
+        const { urls, sessionFolder, ...savedPrefs } = result.igbdl_state;
         dlState = Object.assign({ 
+            sessionFolder: '',
+            urls: {},
             zipMode: true, 
             speedMode: 'turbo', 
             autoHarvest: true, 
             autoClearCompleted: false,
             scrollDelayMs: 300,
             scrollToTop: false
-        }, result.igbdl_state);
-        // Normalize any saved URLs to clean 11-char keys
-        const cleanedUrls = {};
-        for (const [k, v] of Object.entries(dlState.urls || {})) {
-            const m = k.match(/\/(p|reel)\/([A-Za-z0-9_-]+)/);
-            if (m) {
-                const shortcode = m[2].length > 11 ? m[2].substring(0, 11) : m[2];
-                cleanedUrls[`https://www.instagram.com/${m[1]}/${shortcode}/`] = v;
-            } else {
-                cleanedUrls[k] = v;
-            }
-        }
-        dlState.urls = cleanedUrls;
-        addLog(`Loaded state with ${Object.keys(dlState.urls).length} URLs (speed: ${dlState.speedMode}, zip: ${dlState.zipMode})`);
+        }, savedPrefs);
+        addLog(`Loaded preferences (speed: ${dlState.speedMode}, zip: ${dlState.zipMode}) - Fresh ephemeral queue`);
     }
 });
 
 function saveState() {
-    chrome.storage.local.set({ igbdl_state: dlState });
+    // Only persist preferences to disk; urls live strictly in memory for active view
+    const { urls, sessionFolder, ...prefsToSave } = dlState;
+    chrome.storage.local.set({ igbdl_state: prefsToSave });
     chrome.runtime.sendMessage({ 
         type: "STATE_UPDATED", 
         state: dlState, 
@@ -714,6 +707,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
     } else if (request.type === "PAGE_VIEW_CHANGED") {
         addLog(`User navigated to: ${request.path} (isCollection: ${request.isCollection})`);
+        if (downloadStatus !== 'running' && downloadStatus !== 'paused') {
+            dlState.urls = {};
+            saveState();
+            addLog("🧹 Queue auto-reset: Scoped cleanly to new view.");
+        }
     } else if (request.type === "GET_ACTIVE_TAB_PAGE_INFO") {
         chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
             if (!tabs || tabs.length === 0 || !tabs[0].url.includes('instagram.com')) {
@@ -905,4 +903,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ ok: true });
     }
     return true;
+});
+
+// ── Tab Reload & Refresh Listener ──
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    // When user refreshes an Instagram tab, cleanly reset queue if not actively downloading
+    if (tab?.url && tab.url.includes("instagram.com") && changeInfo.status === "loading") {
+        if (downloadStatus !== 'running' && downloadStatus !== 'paused') {
+            dlState.urls = {};
+            saveState();
+            addLog(`Instagram tab ${tabId} reloaded: Queue reset for fresh feed.`);
+        }
+    }
 });
