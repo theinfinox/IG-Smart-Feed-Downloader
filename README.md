@@ -135,6 +135,12 @@ If this tool saved you time or made your workflow easier, consider supporting it
 
 ---
 
+## 🔒 Privacy & Data Safety
+
+This extension does not collect, transmit, or store any personal data. For detailed information, see our [Privacy Policy](PRIVACY.md).
+
+---
+
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE) — see the LICENSE file for details.
