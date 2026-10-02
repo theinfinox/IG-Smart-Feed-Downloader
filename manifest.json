@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "IG Bulk Downloader Ultimate",
+  "version": "1.2",
+  "description": "Silent bulk downloader for Instagram posts, carousels, and private accounts.",
+  "permissions": [
+    "downloads",
+    "tabs",
+    "scripting",
+    "storage",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "*://*.instagram.com/*",
+    "*://*.cdninstagram.com/*",
+    "*://*.fbcdn.net/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "IG Downloader"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.instagram.com/*"],
+      "js": ["feed_collector.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

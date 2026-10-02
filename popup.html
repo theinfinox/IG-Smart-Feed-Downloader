@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>IG Bulk Downloader</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <h2>IG Bulk Downloader</h2>
+  </div>
+  
+  <div class="section">
+    <div class="step-title">1. Link Harvester</div>
+    <div class="desc">Auto-scrolls collections until end or target limit. Live auto-harvest.</div>
+
+    <!-- Active Instagram View Badge & Scoped Loaders -->
+    <div id="page-context-box" style="margin-bottom: 8px; padding: 6px 8px; background: #172554; border: 1px solid #1e40af; border-radius: 4px; font-size: 11px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px;">
+        <span id="page-context-text" style="color: #93c5fd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="Current Instagram tab status">📍 Checking active tab...</span>
+      </div>
+      <div id="page-action-group" style="display: none; gap: 6px;" class="btn-group">
+        <button id="btn-load-page" class="primary" style="padding: 4px 6px; font-size: 10px;" title="Replace queue with this collection/view">📥 Load (0)</button>
+        <button id="btn-append-page" style="background: #1e3a8a; padding: 4px 6px; font-size: 10px;" title="Add to existing queue without clearing">➕ Add (+0)</button>
+      </div>
+    </div>
+
+    <!-- High-Speed Resilient Auto-Scroll Engine Bar -->
+    <div style="margin-bottom: 8px; padding: 7px 8px; background: #1f2937; border: 1px solid #374151; border-radius: 4px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px;">
+        <span style="font-size: 11px; color: #d1d5db;">Target Limit:</span>
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <input type="number" id="num-target-limit" value="100" min="0" max="5000" style="width: 55px; background: #111827; border: 1px solid #4b5563; color: #fff; font-size: 11px; border-radius: 3px; padding: 2px 4px; text-align: center;" title="Enter number of posts to capture, or 0 for All until end of collection">
+          <span style="font-size: 10px; color: #9ca3af;">posts (0=All)</span>
+        </div>
+      </div>
+
+      <!-- Option A Pacing Selector -->
+      <div style="margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-size: 11px; color: #bbb;">Scroll Pacing:</span>
+        <select id="sel-scroll-pacing" style="background:#111827; color:#fff; border:1px solid #4b5563; border-radius:3px; font-size:11px; padding:2px 4px; cursor:pointer;" title="Adjust scrolling delay based on network speed">
+          <option value="300" selected>⚡ Fast (~300ms - Default)</option>
+          <option value="150">🏎️ Blazing (~150ms - Fiber)</option>
+          <option value="700">🛡️ Balanced (~700ms)</option>
+          <option value="1500">⏳ Throttled (~1.5s - Slow Net)</option>
+        </select>
+      </div>
+
+      <div class="btn-group">
+        <button id="btn-auto-scroll" class="primary" style="padding: 6px 8px; font-size: 11px;">📜 Start Auto-Scroll</button>
+      </div>
+
+      <!-- Viewport Position Preference -->
+      <div style="margin-top: 6px; display: flex; align-items: center; gap: 6px;">
+        <input type="checkbox" id="chk-scroll-to-top" style="accent-color: #2563eb; cursor: pointer;">
+        <label for="chk-scroll-to-top" style="font-size: 10px; color: #9ca3af; cursor: pointer; user-select: none;">Scroll to top when finished (Default: Stay at bottom)</label>
+      </div>
+
+      <div id="auto-scroll-status" style="display: none; font-size: 10px; color: #93c5fd; margin-top: 5px; line-height: 1.35; word-wrap: break-word;"></div>
+    </div>
+
+    <!-- Auto-Harvest Discretion Toggle (Default: ON) -->
+    <div style="margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+      <input type="checkbox" id="chk-auto-harvest" checked style="accent-color: #2563eb; cursor: pointer;">
+      <label for="chk-auto-harvest" style="font-size: 11px; color: #d1d5db; cursor: pointer; user-select: none;">⚡ Auto-harvest as you scroll (Default: ON)</label>
+    </div>
+
+    <div class="stats" id="collector-stats">Queue: 0 links</div>
+    <div>
+      <button id="btn-export" style="width: 100%;">⤓ Export Links to .txt</button>
+    </div>
+  </div>
+  
+  <div class="section">
+    <div class="step-title">2. Download Engine</div>
+    
+    <div style="margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+      <span style="font-size: 11px; color: #bbb;">Speed Engine:</span>
+      <select id="sel-speed-mode" style="background:#262626; color:#fff; border:1px solid #444; border-radius:4px; font-size:11px; padding:3px 6px; cursor:pointer;">
+        <option value="turbo">🏎️ Turbo (~0.5s Fast)</option>
+        <option value="balanced">🛡️ Balanced (~2s Safe)</option>
+        <option value="extreme">⚡ Extreme (3x Parallel)</option>
+      </select>
+    </div>
+
+    <div id="extreme-warning" style="display:none; margin-bottom: 6px; font-size: 10px; color: #fca5a5; background: #450a0a; padding: 5px 8px; border-radius: 4px; border: 1px solid #991b1b; line-height: 1.35;">
+      ⚠️ <strong>Warning:</strong> Extreme mode downloads 3 posts concurrently. Recommended for smaller batches to avoid temporary Instagram rate limits.
+    </div>
+    
+    <div style="margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+      <input type="checkbox" id="chk-zip-mode" checked style="accent-color: #2563eb; cursor: pointer;">
+      <label for="chk-zip-mode" style="font-size: 11px; color: #e0e0e0; cursor: pointer; user-select: none;">Bundle into single .ZIP file (if &gt;1 post)</label>
+    </div>
+
+    <div class="btn-group">
+      <button id="btn-dl-start" class="primary">▶ Start</button>
+      <button id="btn-dl-pause" style="background:#d97706;" disabled>⏸ Pause</button>
+      <button id="btn-dl-stop" class="danger" disabled>⏹ Stop</button>
+    </div>
+    <div style="margin-top: 8px;" class="btn-group">
+      <button id="btn-dl-retry">Retry Failed</button>
+      <button id="btn-save-log" style="background:#4b5563;">Save Debug Log</button>
+    </div>
+    <div class="status" id="dl-status">Ready.</div>
+    <div class="stats" id="dl-stats">Success: 0 | Failed: 0 | Skipped: 0 | Pending: 0</div>
+  </div>
+
+  <div class="section">
+    <div class="step-title">3. Queue Management</div>
+    <div class="desc">Manage and clean up your download queue with full user discretion.</div>
+
+    <!-- Auto-Clear Completed Discretion Toggle (Default: OFF) -->
+    <div style="margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+      <input type="checkbox" id="chk-auto-clear" style="accent-color: #0f766e; cursor: pointer;">
+      <label for="chk-auto-clear" style="font-size: 11px; color: #d1d5db; cursor: pointer; user-select: none;">🧹 Auto-clear completed posts after download</label>
+    </div>
+
+    <div class="btn-group">
+      <button id="btn-clear-completed" style="background:#0f766e;">🧹 Clear Completed (0)</button>
+      <button id="btn-force-clear" class="danger">⚡ Force Clear All (0)</button>
+    </div>
+
+    <!-- Accessible In-Popup Confirmation Box -->
+    <div id="force-clear-box" class="confirm-box" style="display:none;">
+      <div style="font-size: 11px; font-weight: bold; color: #f87171; margin-bottom: 4px;">
+        ⚠️ FORCE CLEAR CONFIRMATION
+      </div>
+      <div style="font-size: 10px; color: #d1d5db; margin-bottom: 8px; line-height: 1.35;">
+        This will immediately stop active downloads, wipe all collected links, and reset Instagram tab collectors back to 0.
+      </div>
+      <div class="btn-group">
+        <button id="btn-confirm-force-clear" class="danger" style="padding: 7px 10px;">✕ Yes, Force Clear Everything</button>
+        <button id="btn-cancel-force-clear" style="background: #374151; padding: 7px 10px;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="step-title">Activity Log</div>
+    <div id="log-console" class="log-console">Waiting for activity...</div>
+  </div>
+
+  <!-- Buy Me a Coffee Support Link -->
+  <div style="margin-top: 10px; margin-bottom: 6px; text-align: center;">
+    <a href="https://buymeacoffee.com/theinfinox" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: #ffdd00; color: #000000; font-weight: 700; font-size: 11px; padding: 6px 14px; border-radius: 6px; text-decoration: none; box-shadow: 0 2px 4px rgba(0,0,0,0.3); letter-spacing: 0.2px;">
+      ☕ <span>Buy Me a Coffee</span>
+    </a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
