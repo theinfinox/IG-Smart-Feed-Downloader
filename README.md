@@ -41,6 +41,63 @@ A high-performance, private, client-side Chrome Extension (Manifest V3) to bulk 
 
 ---
 
+## 🏗️ Architecture & How It Works
+
+The extension is engineered around a modular, non-destructive Manifest V3 architecture designed for high throughput, zero telemetry, and maximum stability:
+
+```mermaid
+graph TD
+    subgraph BROWSER_TAB ["Instagram Tab Context (Content Script)"]
+        DOM[Instagram Feed / Collection DOM] --> SCAN[feed_collector.js<br/>Strict <main> Scoping]
+        SCAN --> ENGINE[Auto-Scroll Engine<br/>Adaptive Pacing & 2-Stage Nudge]
+        ENGINE --> SPINNER[Network Watcher<br/>Loading Spinner & Auto-Retry]
+        API_BRIDGE[Page-Context API Bridge<br/>Authenticated Fetch with Session Cookies]
+    end
+
+    subgraph SW ["Service Worker (background.js)"]
+        QUEUE[In-Memory Ephemeral Queue<br/>Auto-resets on Navigation/Reload]
+        WATERFALL[Multi-Tier Extraction Waterfall<br/>Tier 1: API Bridge ~150ms<br/>Tier 2: Static HTML Shell<br/>Tier 3: Ghost Tab Fallback]
+        BUFFER[Parallel Media Buffer & JSZip]
+    end
+
+    subgraph OFFSCREEN ["Offscreen Document (offscreen.html)"]
+        BLOB[chrome.offscreen DOM<br/>Converts ArrayBuffer into Blob URL]
+    end
+
+    subgraph DISK ["Local Machine"]
+        DOWNLOADS[Chrome Downloads API<br/>Clean Structured ZIP Archive]
+    end
+
+    SCAN -->|Streams New Post Links| QUEUE
+    QUEUE --> WATERFALL
+    WATERFALL -->|Resolves Media URLs| API_BRIDGE
+    WATERFALL --> BUFFER
+    BUFFER -->|Raw ArrayBuffer Data| BLOB
+    BLOB -->|Trigger Direct Download| DOWNLOADS
+```
+
+### 1. Link Harvester & Auto-Scroll Engine (`feed_collector.js`)
+* **Strict `<main>` Scoping:** Ignores sidebars, header trays, suggested accounts, and recommendation carousels. Only harvests genuine post and reel links within the active collection grid.
+* **Zero-Lag Adaptive Pacing:** When scrolling fast (`< 400ms`), the engine uses `behavior: 'instant'` to eliminate CSS smooth-scroll animation bottlenecks and immediately fire Instagram's `IntersectionObserver`.
+* **Network Auto-Recovery:** Detects and automatically clicks Instagram's native "Retry" / "Try again" buttons if pagination temporarily stumbles.
+* **2-Stage End Verification:** When reaching the bottom of the feed or footer, it performs two patient micro-nudges (80–140px) to verify whether more items are pending before cleanly concluding.
+* **Ephemeral Scoping:** Detects SPA navigation (`PAGE_VIEW_CHANGED`) and page reloads (`chrome.tabs.onUpdated`) to instantly clear old links, ensuring the queue strictly matches the active feed.
+
+### 2. Multi-Tier Extraction Waterfall (`background.js`)
+* **Tier 1 (Page-Context API Bridge ~150ms):** Converts the 11-character post shortcode to a numerical Media ID and queries `/api/v1/media/{media_id}/info/` directly through the active Instagram tab. Uses your logged-in cookies and CSRF token naturally without sending passwords or credentials anywhere.
+* **Tier 2 (Static HTML Shell ~400ms):** If the API bridge encounters an obstacle, fetches the post's public HTML shell and parses embedded `xdt_shortcode_media` JSON scripts.
+* **Tier 3 (Ghost Tab Fallback):** For stubborn edge cases or complex private accounts, creates an off-screen background tab to allow React to render the full-resolution carousel slides.
+
+### 3. Client-Side Archiver & Offscreen Pipeline (`offscreen.js`)
+* Chrome Manifest V3 Service Workers run in headless workers without DOM access, which disables `URL.createObjectURL(blob)`.
+* This extension uses the **Chrome Offscreen API** (`chrome.offscreen`):
+  1. The service worker buffers high-resolution images into binary `ArrayBuffer` objects with `JSZip`.
+  2. The raw buffer is transferred to the offscreen document.
+  3. The offscreen document creates a native `blob:` URL and immediately triggers `chrome.downloads.download()`.
+  4. The result: Blazing fast, 100% offline ZIP generation with zero base64 memory bloat.
+
+---
+
 ## 📥 Installation
 
 1. Clone or download this repository to your computer:
